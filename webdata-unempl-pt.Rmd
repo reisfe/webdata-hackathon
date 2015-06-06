@@ -1,0 +1,289 @@
+---
+title: "Cookbook for unemployment nowcast based on Google Trends"
+author: "Fernando Reis, Loredana di Consiglio"
+date: "4 June 2015"
+output: html_document
+---
+
+This cookbook was prepared for the first Eurostat big data hackthon.
+
+## Step 1: a priori selection of query terms
+
+Select which terms have a trend which could possibly help predict unemployment (subjective educated choice). This will depend on the country for which you want to produce the nowcasts.
+
+For example for France these could be:
+
+* 'pole emploi' is the French governmental agency which registers unemployed people, helps them find jobs and provides them with financial aid;
+* 'indemnit??' refers to allocations;
+* 'etre au chomage' is a query we believe unemployed people search in order to find useful resources for improving their condition.
+
+For Italy, we could select:
+
+* 'impiego', that is 'job';
+* 'offerte lavoro', that is 'job vacancies';
+* 'curriculum' is a term people looking for jobs might search in order to find useful hints and improve the chances that their resume retains employers' attention;
+* 'infojobs' refers to a popular website consulted in Italy for job hunting.
+
+In this exemple we will do it for Portugal and we will select the following search terms:
+
+* 'desemprego';
+* 'subsidio desemprego';
+* 'oferta emprego'. 
+
+## Step 2: Get data from Google Trends
+
+1. Access Google Trends website: http://www.google.com/trends/
+
+2. Sign in to your Google account (if you don't have one then you will need to create it).
+
+3. Enter the search term for which you want the trend in the text box at the top.
+
+4. Enter additional terms in the box '+ Add term'
+
+5. In the section "Regional interest" click over the country you're interested, in our case "Portugal", to select only searches performed by people located in that country.
+
+![][1]
+
+6. Select "Download as CSV" in the top right button and save it in a sub-folder named "data". Open the csv file for inspection and note that the data is located between lines 5 and 600.
+
+![][2]
+
+7. Load data into R. 
+Data is loaded with the function `read.table`.
+```{r}
+gt.wk.data.pt <- read.table('data/report.csv', 
+                            sep=',', 
+                            header=TRUE, 
+                            colClasses =c("character", rep("integer", 3)),
+                            skip = 4, nrows=600-4-1)
+```
+
+Change the name of the first column to 'time' and convert the first column to type date.
+```{r}
+names(gt.wk.data.pt)[1] <- "time"
+gt.wk.data.pt$time <- sapply(gt.wk.data.pt$time, 
+                          FUN=function(x) strsplit(x, split=" - ")[[1]][1])
+gt.wk.data.pt$time <- as.Date(gt.wk.data.pt$time, format="%Y-%m-%d")
+rownames(gt.wk.data.pt) <- gt.wk.data.pt$time
+```
+
+Restrict data to continous period of non-null data.
+```{r}
+m <- as.matrix(gt.wk.data.pt[, 2:4])
+m[m==0] <- NA
+m <- na.contiguous(m)
+gt.wk.data.pt <- data.frame(m)
+```
+
+8. Convert periodicity from weekly to monthly 
+We will use an auxiliar function stored in a R source file located in the scripts folder to convert the weekly GT time-series into a monthly time-series. The function is named `aggregate_week2month()` and the method it uses is to desagregate the weekly series into a daily series (using the method of Denton-Cholette) and then to aggregate the daily series to monthly.
+```{r}
+source("scripts/auxiliar_functions.R")
+gt.mn.data.pt <- aggregate_week2month(gt.wk.data.pt, dates=rownames(gt.wk.data.pt))
+```
+
+Convert GT data to time-series format.
+```{r}
+earliest.year <- min(gt.mn.data.pt$year)
+earliest.month <- min(gt.mn.data.pt[gt.mn.data.pt$year==earliest.year, ]$month)
+gt.ts.pt <- ts(gt.mn.data.pt[, -(1:2)], frequency=12, start=c(earliest.year, earliest.month))
+```
+
+## Step 3: Get unemployment data from NewCronos
+
+Official monthly unemployment data published by Eurostat can be obtained from the database in the [website](http://ec.europa.eu/eurostat/web/main/home). The table code is 'une_nb_m' and you can use the search text box to get it.
+
+![][3]
+
+In the list of search results the database table should come at the top and will include several icons in the top right. Access the first one corresponding to 'Access Data Explorer'. This will take you to a new browser page with the data explorer.
+
+![][4]
+
+Select all the months from January 2008 to the most recent month for which data is available. For that click over the plus sign next to the 'TIME' box and in the following window select the corresponding months.
+In the top right of the data explorer you have several icons. Click over the third one corresponding to 'Download'. In the new page shown click over 'Download in CSV Format'. Save the file in the sub-folder named "data" where you saved the GT data.
+
+The dataset is downloaded as a CSV file.
+
+When downloading the dataset, even if some of the table dimensions are fixed they are still present in the data file. They can be skipped by defining the column class as 'NULL' when reading the CSV file.
+```{r}
+estat_file <- unz("data/une_nb_m.zip", filename="une_nb_m_1_Data.csv")
+estat.mn.data <- read.csv(file=estat_file, 
+                    na.strings=":", 
+                    colClasses=c("character", "factor", "NULL", "NULL", "NULL", 
+                                 "character", "character"))
+estat.mn.data$Value <- as.numeric(gsub(",", "", estat.mn.data$Value))
+```
+
+Select the data to your country of interest, in our case "Portugal".
+```{r}
+estat.mn.data.pt <- estat.mn.data[estat.mn.data$GEO=="Portugal", ]
+```
+
+Time reference in variable TIME was converted to date format. (A fictitious day needs to be added to the time reference in order for it to be converted to date.)
+```{r}
+estat.mn.data.pt$TIME <- as.Date(paste(estat.mn.data.pt$TIME, "01", sep="D"), format="%YM%mD%d")
+```
+
+Convert the data frame to time-series format.
+```{r}
+earliest <- min(estat.mn.data.pt$TIME)
+earliest.year <- as.numeric(format(earliest, format = "%Y"))
+earliest.month <- as.numeric(format(earliest, format = "%m"))
+estat.ts.pt <- ts(estat.mn.data.pt$Value, frequency=12, start=c(earliest.year, earliest.month))
+```
+
+Inspect the starting and ending periods of the data from eurostat and from GT.
+```{r}
+start(estat.ts.pt)
+end(estat.ts.pt)
+start(gt.ts.pt)
+end(gt.ts.pt)
+```
+
+Merge Eurostat and Google Trends time-series.
+```{r}
+library(zoo)
+estat <- as.zoo(estat.ts.pt)
+ts.pt <- as.ts(merge(estat, as.zoo(gt.ts.pt)))
+```
+
+Restrict data to continous period of non-null data.
+```{r}
+ts.pt <- na.contiguous(ts.pt)
+```
+
+Let's plot the time-series.
+```{r}
+plot(ts.pt)
+```
+
+## Step 4: Estimate basic model without Google Trends
+
+The model we will use to make predictions is an SARIMA model.
+
+$$ y_{t}=\alpha.y_{t-1}+\beta.u_{t-1}+u_{t} $$
+
+To estimate the parameters of the SARIMA model, we will use the R function `arima()`.
+
+In order to assess the prediction accuracy of the model, an out-of-sample evaluation will be performed. The evaluation is made for one period ahead only, as the timeliness of Eurostat monthly average number of persons unemployed is t-1 and therefore nowcasts will consist of predictions for a forecasting horizon of one month.
+
+We create time slices, or folders, 48 months long from the total length of the time-series: `r length(ts.pt)`.
+The first slice starts in the first month of the time-series and ends in month 48. The second slice starts in month 2 and ends in month 49. And so forth.
+```{r}
+library(caret)
+ts.folds <- createTimeSlices(y=ts.pt[, "estat"], initialWindow=48, horizon=1, fixedWindow = FALSE)
+```
+
+We then create a cycle where for each slice we estimate the model and store the result in variable `model`, make the forecast of one month and store the value of the forecasts in variable `forecast` and the real values in variable `realValue`.
+```{r warning=FALSE}
+forecast <- NULL
+realValue <- NULL
+for (i in 1:length(ts.folds$train)) {
+   model <- arima(ts.pt[ts.folds$train[[i]]], 
+                  order=c(1, 0, 0), 
+                  seasonal = list(order = c(1, 0, 0)), 
+                  method="ML")
+  forecast <- c(forecast, predict(model)$pred[1])
+  realValue <- c(realValue, ts.pt[ts.folds$test[[i]]])
+}
+```
+
+We now can compare the predicted (i.e. forecasted) values with the real values, for example with a plot.
+```{r}
+plot(forecast ~ realValue)
+```
+
+One typical measure of the predictive error is the mean square error (MSE).
+```{r}
+error <- forecast - realValue
+squareError <- error^2
+MSE <- mean(squareError)
+MSE
+```
+
+A more intuitive measure of predictive error is the percentual difference between the predicted value and the real value.
+```{r}
+percentageError <- forecast / realValue - 1
+round(mean(abs(percentageError))*100, 3)
+round(quantile(percentageError, c(0.025, 0.975))*100, 3)
+```
+
+## Step 5: Estimate model including Google Trends
+
+The model we will use to make predictions is an SARIMAX model. The SARIMAX model has a similar specification as the SARIMA model, but also includes some other variables which should bring additional information that can improve the prediction.
+
+$$ y_{t}=\alpha.y_{t-1}+\gamma_{0}.x_{t}+\gamma_{1}.x_{t-1}+\beta.u_{t-1}+u_{t} $$
+
+Similirly to the SARIMA model we create time slices 48 months long.
+```{r}
+ts.folds <- createTimeSlices(y=ts.pt[, 2], initialWindow=48, horizon=1, fixedWindow = FALSE)
+```
+
+We then run the same cycle for each slice.
+```{r warning=FALSE}
+forecast <- NULL
+realValue <- NULL
+for (i in 1:length(ts.folds$train)) {
+  model <- arima(ts.pt[ts.folds$train[[i]]], 
+                 order=c(1, 0, 0), 
+                 seasonal = list(order = c(1, 0, 0)), 
+                 xreg = ts.pt[ts.folds$train[[i]], 2:4],
+                 method="ML")
+  forecast <- c(forecast, predict(model, newxreg = t(ts.pt[ts.folds$test[[i]], 2:4]))$pred[1])
+  realValue <- c(realValue, ts.pt[ts.folds$test[[i]]])
+}
+```
+
+Compare the predicted values with the real values with a plot.
+```{r}
+plot(forecast ~ realValue)
+```
+
+One typical measure of the predictive error is the mean square error (MSE).
+```{r}
+error <- forecast - realValue
+squareError <- error^2
+MSE <- mean(squareError)
+MSE
+```
+
+A more intuitive measure of predictive error is the percentual difference between the predicted value and the real value.
+```{r}
+percentageError <- forecast / realValue - 1
+round(mean(abs(percentageError))*100, 3)
+round(quantile(percentageError, c(0.025, 0.975))*100, 3)
+```
+
+## Step 6: Make a nowcast for next month
+Now that we have a prediction model, let's make a nowcast for next month.
+We will estimate the model with all the sample we have.
+```{r results='hide'}
+mod.ts.sarimax <- arima(ts.pt[,"estat"], order=c(1,0,0), seasonal = c(1,0,0), xreg = ts.pt[, 2:4])
+```
+
+Let's see the estimated values of the parameters of the model.
+```{r}
+mod.ts.sarimax
+```
+
+The nowcasted unemployment for next month is:
+```{r}
+nowcast <- predict(mod.ts.sarimax, newxreg = gt.mn.data.pt[79, 3:5])$pred[1]
+nowcast
+```
+
+How does it defer from the value of the previous month?
+```{r}
+nowcast - ts.pt[78, "estat"]
+```
+
+Let's plot our series with our nowcast.
+```{r}
+plot(ts.pt[,"estat"])
+points(x=2015.250, y=nowcast, type="p")
+```
+
+[1]: figure/GT.png "Google Trends"
+[2]: figure/button.png "GT download button"
+[3]: figure/estat_search.png "Eurostat search results"
+[4]: figure/estat_data_explorer.png "Eurostat data explorer"
