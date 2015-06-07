@@ -5,7 +5,7 @@ date: "4 June 2015"
 output: html_document
 ---
 
-This cookbook was prepared for the first Eurostat big data hackthon.
+This cookbook was prepared for the first Eurostat big data hackathon. The data preparation, analysis and nowcasting is performed in R.
 
 ## Step 1: a priori selection of query terms
 
@@ -30,7 +30,7 @@ In this exemple we will do it for Portugal and we will select the following sear
 * 'subsidio desemprego';
 * 'oferta emprego'. 
 
-## Step 2: Get data from Google Trends
+## Step 2: Get data from Google Trends (GT)
 
 1. Access Google Trends website: http://www.google.com/trends/
 
@@ -47,6 +47,30 @@ In this exemple we will do it for Portugal and we will select the following sear
 6. Select "Download as CSV" in the top right button and save it in a sub-folder named "data". Open the csv file for inspection and note that the data is located between lines 5 and 600.
 
 ![][2]
+
+## Step 3: Prepare R for the data processing
+
+Let's prepare our workspace. Download the following GitHub repository as a zip file.
+
+Goto https://github.com/reisfe/webdata-hackathon and click the download as a zip file button.
+![][githubzip]
+
+Unzip it to your disk. This folder will be our workspace. It includes the source file for this cookbook and in the 'scripts' sub-folder you will find a source file, 'auxiliar_functions.R', which includes some auxiliar functions we will use further ahead in this cookbook.
+
+In order for the R code in this cookbook to work without problems you will need to set this folder as your default working directory. If the zip file were unziped to '~/webdata-hackathon' then you would run the following instruction.
+
+```{r eval=FALSE}
+setwd("~/webdata-hackathon")
+```
+
+You call `setwd` with your own folder, to where you unzipped the repository.
+
+We will use in this cookbook three R packages, `caret`, `lubridate` and `zoo`. In order to install the packages run the following code in the R console.
+```{r eval=FALSE}
+install.packages(c("caret", "lubridate", "zoo"))
+```
+
+## Step 4: Prepare the GT datasets
 
 7. Load data into R. 
 Data is loaded with the function `read.table`.
@@ -89,7 +113,7 @@ earliest.month <- min(gt.mn.data.pt[gt.mn.data.pt$year==earliest.year, ]$month)
 gt.ts.pt <- ts(gt.mn.data.pt[, -(1:2)], frequency=12, start=c(earliest.year, earliest.month))
 ```
 
-## Step 3: Get unemployment data from NewCronos
+## Step 5: Get unemployment data from Eurostat website
 
 Official monthly unemployment data published by Eurostat can be obtained from the database in the [website](http://ec.europa.eu/eurostat/web/main/home). The table code is 'une_nb_m' and you can use the search text box to get it.
 
@@ -101,6 +125,8 @@ In the list of search results the database table should come at the top and will
 
 Select all the months from January 2008 to the most recent month for which data is available. For that click over the plus sign next to the 'TIME' box and in the following window select the corresponding months.
 In the top right of the data explorer you have several icons. Click over the third one corresponding to 'Download'. In the new page shown click over 'Download in CSV Format'. Save the file in the sub-folder named "data" where you saved the GT data.
+
+## Step 6: Prepare Eurostat dataset
 
 The dataset is downloaded as a CSV file.
 
@@ -157,7 +183,7 @@ Let's plot the time-series.
 plot(ts.pt)
 ```
 
-## Step 4: Estimate basic model without Google Trends
+## Step 7: Estimate basic model without Google Trends
 
 The model we will use to make predictions is an SARIMA model.
 
@@ -208,7 +234,7 @@ round(mean(abs(percentageError))*100, 3)
 round(quantile(percentageError, c(0.025, 0.975))*100, 3)
 ```
 
-## Step 5: Estimate model including Google Trends
+## Step 8: Estimate model including Google Trends
 
 The model we will use to make predictions is an SARIMAX model. The SARIMAX model has a similar specification as the SARIMA model, but also includes some other variables which should bring additional information that can improve the prediction.
 
@@ -254,7 +280,7 @@ round(mean(abs(percentageError))*100, 3)
 round(quantile(percentageError, c(0.025, 0.975))*100, 3)
 ```
 
-## Step 6: Make a nowcast for next month
+## Step 9: Make a nowcast for next month
 Now that we have a prediction model, let's make a nowcast for next month.
 We will estimate the model with all the sample we have.
 ```{r results='hide'}
@@ -284,6 +310,7 @@ points(x=2015.250, y=nowcast, type="p")
 ```
 
 [1]: figure/GT.png "Google Trends"
+[githubzip]: figure/github-zip.png "GitHub download as zip button"
 [2]: figure/button.png "GT download button"
 [3]: figure/estat_search.png "Eurostat search results"
 [4]: figure/estat_data_explorer.png "Eurostat data explorer"
