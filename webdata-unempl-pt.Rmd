@@ -30,25 +30,7 @@ In this exemple we will do it for Portugal and we will select the following sear
 * 'subsidio desemprego';
 * 'oferta emprego'. 
 
-## Step 2: Get data from Google Trends (GT)
-
-1. Access Google Trends website: http://www.google.com/trends/
-
-2. Sign in to your Google account (if you don't have one then you will need to create it).
-
-3. Enter the search term for which you want the trend in the text box at the top.
-
-4. Enter additional terms in the box '+ Add term'
-
-5. In the section "Regional interest" click over the country you're interested, in our case "Portugal", to select only searches performed by people located in that country.
-
-![][1]
-
-6. Select "Download as CSV" in the top right button and save it in a sub-folder named "data". Open the csv file for inspection and note that the data is located between lines 5 and 600.
-
-![][2]
-
-## Step 3: Prepare R for the data processing
+## Step 2: Prepare R for the data processing
 
 Let's prepare our workspace. Download the following GitHub repository as a zip file.
 
@@ -70,40 +52,77 @@ We will use in this cookbook three R packages, `caret`, `lubridate` and `zoo`. I
 install.packages(c("caret", "lubridate", "zoo"))
 ```
 
-## Step 4: Prepare the GT datasets
+## Step 3: Get data from Google Trends (GT)
 
-7. Load data into R. 
-Data is loaded with the function `read.table`.
+3.1. Access Google Trends website: http://www.google.com/trends/
+
+3.2. Sign in to your Google account (if you don't have one then you will need to create it).
+
+3.3. Enter one search term for which you want the time-series in the text box at the top.
+
+3.4. In the section "Regional interest" click over the country you're interested, in our case "Portugal", to select only searches performed by people located in that country.
+
+![][gt]
+
+3.5. Select "Download as CSV" in the top right button and save the file in a sub-folder named "data" included in our workspace with a name different for each search term. For example for the search term 'desemprego' you can use the file name 'report_desemprego.csv'.
+
+![][gtbutton]
+
+3.6. Repeat steps 3.3 to 3.5 for the remaining search terms that you have selected in step 1.
+
+## Step 4: Prepare the GT datasets in R
+
+Store in variable `gtFiles` the list of data files where you saved the GT data.
 ```{r}
-gt.wk.data.pt <- read.table('data/report.csv', 
-                            sep=',', 
-                            header=TRUE, 
-                            colClasses =c("character", rep("integer", 3)),
-                            skip = 4, nrows=600-4-1)
+gtFiles <- c("data/report_desemprego.csv", "data/report_subsidio_desemprego.csv", "data/report_oferta_emprego.csv")
 ```
 
-Change the name of the first column to 'time' and convert the first column to type date.
+Open one of the csv files for inspection and note that the data starts only in line 5. Take note of the number of the last line with data. In the case of the example in this cookbook it is line number 601.
 ```{r}
-names(gt.wk.data.pt)[1] <- "time"
-gt.wk.data.pt$time <- sapply(gt.wk.data.pt$time, 
+firstLine <- 5
+lastLine <- 601
+```
+
+In order to load the data into R, we use the function `read.table`. We will load all GT data files and merge them in a data frame named `gt.wk.data`.
+```{r}
+rm(gt.wk.data)
+for (fileName in gtFiles) {
+  data <- read.table(fileName, 
+                     sep = ',', 
+                     header = TRUE, 
+                     colClasses = c("character", "integer"),
+                     skip = firstLine - 1, 
+                     nrows = lastLine - firstLine)
+  if (exists("gt.wk.data")) {
+    gt.wk.data <- cbind(gt.wk.data, data[, 2])
+    } else {
+      gt.wk.data <- data
+      }
+  }
+```
+
+Change the name of the columns of the data frame. Name the first column 'time' and the other columns according to the search terms. Then convert the first column to type date and use it to name the rows of the data frame.
+```{r}
+names(gt.wk.data) <- c("time", "desemprego", "subsidio desemprego", "oferta emprego")
+gt.wk.data$time <- sapply(gt.wk.data$time, 
                           FUN=function(x) strsplit(x, split=" - ")[[1]][1])
-gt.wk.data.pt$time <- as.Date(gt.wk.data.pt$time, format="%Y-%m-%d")
-rownames(gt.wk.data.pt) <- gt.wk.data.pt$time
+gt.wk.data$time <- as.Date(gt.wk.data$time, format="%Y-%m-%d")
+rownames(gt.wk.data) <- gt.wk.data$time
 ```
 
 Restrict data to continous period of non-null data.
 ```{r}
-m <- as.matrix(gt.wk.data.pt[, 2:4])
+m <- as.matrix(gt.wk.data[, 2:4])
 m[m==0] <- NA
 m <- na.contiguous(m)
-gt.wk.data.pt <- data.frame(m)
+gt.wk.data <- data.frame(m)
 ```
 
 8. Convert periodicity from weekly to monthly 
 We will use an auxiliar function stored in a R source file located in the scripts folder to convert the weekly GT time-series into a monthly time-series. The function is named `aggregate_week2month()` and the method it uses is to desagregate the weekly series into a daily series (using the method of Denton-Cholette) and then to aggregate the daily series to monthly.
 ```{r}
 source("scripts/auxiliar_functions.R")
-gt.mn.data.pt <- aggregate_week2month(gt.wk.data.pt, dates=rownames(gt.wk.data.pt))
+gt.mn.data.pt <- aggregate_week2month(gt.wk.data, dates=rownames(gt.wk.data))
 ```
 
 Convert GT data to time-series format.
@@ -309,8 +328,8 @@ plot(ts.pt[,"estat"])
 points(x=2015.250, y=nowcast, type="p")
 ```
 
-[1]: figure/GT.png "Google Trends"
+[gt]: figure/GT.png "Google Trends"
 [githubzip]: figure/github-zip.png "GitHub download as zip button"
-[2]: figure/button.png "GT download button"
+[gtbutton]: figure/button.png "GT download button"
 [3]: figure/estat_search.png "Eurostat search results"
 [4]: figure/estat_data_explorer.png "Eurostat data explorer"
