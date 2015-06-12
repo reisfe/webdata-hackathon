@@ -136,13 +136,27 @@ gt.ts.pt <- ts(gt.mn.data.pt[, -(1:2)], frequency=12, start=c(earliest.year, ear
 
 Official monthly unemployment data published by Eurostat can be obtained from the database in the [website](http://ec.europa.eu/eurostat/web/main/home). The table code is 'une_nb_m' and you can use the search text box to get it.
 
-![][3]
+![][estatsear]
 
 In the list of search results the database table should come at the top and will include several icons in the top right. Access the first one corresponding to 'Access Data Explorer'. This will take you to a new browser page with the data explorer.
 
-![][4]
+![][estatexpl]
 
-Select all the months from January 2008 to the most recent month for which data is available. For that click over the plus sign next to the 'TIME' box and in the following window select the corresponding months.
+Click over the plus sign next to one of the dimensions of the table, for example the one next to the 'TIME' box. This will take you to the categories selection window.
+
+![][estatcat]
+
+
+Select the following categories for each of the dimensions.
+
+- TIME: all the months from January 2008 to the most recent month for which data is available.
+- S_ADJ: NSA (Not seasonally adjusted data)
+- SEX: T (Total)
+- GEO: all the categories
+- AGE: TOTAL (Total)
+
+After selecting the categories click over the 'Update' button and it will take you back to the data explorer.
+
 In the top right of the data explorer you have several icons. Click over the third one corresponding to 'Download'. In the new page shown click over 'Download in CSV Format'. Save the file in the sub-folder named "data" where you saved the GT data.
 
 ## Step 6: Prepare Eurostat dataset
@@ -331,5 +345,6 @@ points(x=2015.250, y=nowcast, type="p")
 [gt]: figure/GT.png "Google Trends"
 [githubzip]: figure/github-zip.png "GitHub download as zip button"
 [gtbutton]: figure/button.png "GT download button"
-[3]: figure/estat_search.png "Eurostat search results"
-[4]: figure/estat_data_explorer.png "Eurostat data explorer"
+[estatsear]: figure/estat_search.png "Eurostat search results"
+[estatexpl]: figure/estat_data_explorer.png "Eurostat data explorer"
+[estatcat]: figure/estat_categories_selection.png "Eurostat categories selection window"
